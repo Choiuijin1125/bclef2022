@@ -1,0 +1,125 @@
+trainer:
+    ######################
+    # Globals #
+    ######################
+  accelerator: 'gpu'
+  devices: -1
+  max_epochs: 30
+  strategy: "ddp_find_unused_parameters_false"
+#   amp_backend: 'apex'
+#   amp_level: O1 # O1/O2 for mixed precision
+#   precision: 16 # Should be set to 16 for O1 and O2 to enable the AMP.  
+    
+  
+model:
+  base_model: 
+    name: "tf_efficientnet_b0_ns"
+    pretrained: True
+    in_channels: 1
+  #split_duration: 5
+  label_smoothing: 0.1
+  min_rating: 0.0
+  train_mode: "base"
+  sr: 32000
+  n_mels: 128
+  fmin: 50
+  fmax: 14000
+  hop_size: 512
+  window_size: 2048
+  top_db: null
+  #mel_norm: true
+  num_classes: 152
+  duration: 15
+  target_columns: ???
+  mixup: 1
+  mixup2: 0
+  mix_beta: 0.4
+  train_ds:
+    batch_size: 96
+    num_workers: 64
+    
+  valid_ds: 
+    batch_size: 48
+    num_workers: 64
+    
+  optim:
+    _target_: torch.optim.AdamW
+    lr: 1e-3
+    weight_decay: 1e-6
+           
+  sched:
+    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+    eta_min: 1e-6
+    T_max: ???
+    
+  losses:
+    weights: [1, 1]    
+
+  augment:
+    backgroundnoise:
+      _target_: audiomentations.AddBackgroundNoise
+      sounds_path: "/home/mega/jin/bclef_v2/datasets/binary/ff1010bird_nocall/nocall_resample/"
+      min_snr_in_db: 0
+      max_snr_in_db: 3
+      p: 0.5
+        
+        
+
+    
+exp_manager:
+  seed: 71
+  exp_id: 'EX005'  
+  logger: 
+    _target_: pytorch_lightning.loggers.WandbLogger
+    project: "BCLEF2022"
+    name: "timmSED_exp_003"
+  callbacks:
+    lr_callback: 
+      _target_: pytorch_lightning.callbacks.LearningRateMonitor
+      logging_interval: 'step'
+    checkpoint_callback:
+      _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      save_top_k: 3
+      dirpath: "../outputs/timm/exp_003"
+      monitor: "valid_loss"
+  
+#   EVALUATION = 'AUC'
+  
+
+#     pooling = "max"
+#     pretrained = True
+#     in_channels = 3
+#     img_size = 224 # 128
+#     main_metric = "epoch_f1_at_03"
+
+#     period = 5
+#     duration= 5
+#     n_mels = 224 # 128
+#     fmin = 20
+#     fmax = 16000
+#     n_fft = 2048
+#     hop_length = 512
+#     sample_rate = 32000
+#     sr = 32000
+#     melspectrogram_parameters = {
+#         "n_mels": 224, # 128,
+#         "fmin": 20,
+#         "fmax": 16000
+#     }
+#     DEBUG = False # True
+    
+# exp_manager:
+#   exp_dir: null
+#   name: *name
+#   create_tensorboard_logger: true
+#   create_checkpoint_callback: true
+#   checkpoint_callback_params:
+#     monitor: "val_wer"
+#     mode: "min"
+#     save_top_k: 3
+#   create_wandb_logger: false
+#   wandb_logger_kwargs:
+#     name: "Citrinet-256-8x-Stride-thai"
+#     project: "Citrinet-256-8x-Stride-thai"
+#   resume_if_exists: true
+#   resume_ignore_no_checkpoint: true    
