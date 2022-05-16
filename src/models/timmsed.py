@@ -334,8 +334,7 @@ class SelectiveTimmSEDGPU(LightningModule):
                 
                 x = self.spec_augmenter(x)
             
-            
-            
+                        
         x = x.transpose(2, 3)
         # (batch_size, channels, frames, freq)
         x = self.encoder(x)
@@ -488,7 +487,8 @@ class SelectivePartTimmSEDGPU(LightningModule):
                 x = self.spec_augmenter(x)
             
             
-        x = x.transpose(2, 3)
+        #x = x.transpose(2, 3)
+        print(x.shape)
         # (batch_size, channels, frames, freq)
         x = self.encoder(x)
         # (batch_size, channels, frames)
