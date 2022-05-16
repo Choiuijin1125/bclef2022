@@ -4,7 +4,7 @@ trainer:
     ######################
   accelerator: 'gpu'
   devices: 1
-  max_epochs: 20
+  max_epochs: 11
   strategy: "ddp_find_unused_parameters_false"
 #   amp_backend: 'apex'
 #   amp_level: O1 # O1/O2 for mixed precision
@@ -13,7 +13,7 @@ trainer:
   
 model:
   base_model: 
-    name: "tf_efficientnet_b0_ns"
+    name: "eca_nfnet_l0"
     pretrained: True
     in_channels: 1
   #split_duration: 5
@@ -31,17 +31,17 @@ model:
   num_classes: 152
   duration: 30
   target_columns: ???
-  mixup: 0.5
-  mixup2: 0
-  selective_mixup: 0.8
+  mixup: 0.3
+  mixup2: 0.2
+  selective_mixup: 1
   spec_aug: 0.25
   mix_beta: 1
   train_ds:
-    batch_size: 36
+    batch_size: 24
     num_workers: 32
     
   valid_ds: 
-    batch_size: 48
+    batch_size: 24
     num_workers: 64
     
   optim:
@@ -88,7 +88,7 @@ model:
 
     
 exp_manager:
-  seed: 71
+  seed: 71578
   logger: 
     _target_: pytorch_lightning.loggers.WandbLogger
     project: "BCLEF2022"
@@ -100,7 +100,7 @@ exp_manager:
     checkpoint_callback:
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       save_top_k: 1
-      dirpath: "../outputs/timm/exp_007/exp_007_fold_3"
+      dirpath: "../outputs/timm/exp_008/exp_008_fold_0"
       monitor: "valid_loss"
   
 #   EVALUATION = 'AUC'

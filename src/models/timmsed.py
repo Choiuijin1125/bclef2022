@@ -402,22 +402,22 @@ class SelectivePartTimmSEDGPU(LightningModule):
 
         self.bn0 = nn.BatchNorm2d(cfg.n_mels)
         #self.global_pooling = GeM()
-        base_model = timm.create_model(
+        self.backbone = timm.create_model(
             cfg.base_model.name,
             pretrained=cfg.base_model.pretrained,
+            num_classes=0,
+            global_pool="",
             in_chans=cfg.base_model.in_channels,
         )
-        layers = list(base_model.children())[:-2]
-        self.encoder = nn.Sequential(*layers)
 
-        if hasattr(base_model, "fc"):
-            in_features = base_model.fc.in_features
+        if "efficientnet" in cfg.base_model.name:
+            backbone_out = self.backbone.num_features
         else:
-            in_features = base_model.classifier.in_features
+            backbone_out = self.backbone.feature_info[-1]["num_chs"]
 
-        self.fc1 = nn.Linear(in_features, in_features, bias=True)
+        self.fc1 = nn.Linear(backbone_out, backbone_out, bias=True)
         self.att_block = AttBlockV2(
-            in_features, cfg.num_classes, activation="sigmoid"
+            backbone_out, cfg.num_classes, activation="sigmoid"
         )
 
         self.mixup = Mixup(mix_beta=cfg.mix_beta)
@@ -437,15 +437,15 @@ class SelectivePartTimmSEDGPU(LightningModule):
         bs, time = x.shape
         x = x.reshape(bs * self.factor, time // self.factor)
         
-        if self.training:
-            selective_x = selective_x.reshape(bs * self.factor, time // self.factor)
+#         if self.training:
+#             selective_x = selective_x.reshape(bs * self.factor, time // self.factor)
        
         with torch.cuda.amp.autocast(False):
             
             x = self.logmel_extractor(x).unsqueeze(1).transpose(2, 3)
             
-            if self.training:
-                selective_x = self.logmel_extractor(selective_x).unsqueeze(1).transpose(2, 3)
+#             if self.training:
+#                 selective_x = self.logmel_extractor(selective_x).unsqueeze(1).transpose(2, 3)
             
         frames_num = x.size(2)
 
@@ -453,19 +453,28 @@ class SelectivePartTimmSEDGPU(LightningModule):
         x = self.bn0(x)
         x = x.transpose(1, 3)
         
+#         if self.training:
+#             selective_x = selective_x.transpose(1, 3)
+#             selective_x = self.bn0(selective_x)
+#             selective_x = selective_x.transpose(1, 3)
+        
         if self.training:
-            selective_x = selective_x.transpose(1, 3)
-            selective_x = self.bn0(selective_x)
-            selective_x = selective_x.transpose(1, 3)
             
-        if self.training:
             b, c, t, f = x.shape
-            
             x = x.permute(0, 2, 1, 3)           
-            selective_x = selective_x.permute(0, 2, 1, 3)
+#             selective_x = selective_x.permute(0, 2, 1, 3)
             
             x = x.reshape(b // self.factor, self.factor * t, c, f)
-            selective_x = selective_x.reshape(b // self.factor, self.factor * t, c, f)
+#             selective_x = selective_x.reshape(b // self.factor, self.factor * t, c, f)
+
+            selective_x = x[b // (self.factor * 2):]
+            selective_y = y[b // (self.factor * 2):]
+            selective_weight = weight[b // (self.factor * 2):]
+
+            x = x[:b // (self.factor * 2)]
+            y = y[:b // (self.factor * 2)]
+            weight = weight[:b // (self.factor * 2)]
+            
             
             if np.random.random() <= self.cfg.selective_mixup:
                 
@@ -479,7 +488,7 @@ class SelectivePartTimmSEDGPU(LightningModule):
                 
                 x, y, weight = self.mixup(x, y, weight)
                             
-            x = x.reshape(b, t, c, f)
+            x = x.reshape(b // 2, t, c, f)
             x = x.permute(0, 2, 1, 3)
             
             if np.random.random() < self.cfg.spec_aug:
@@ -487,10 +496,10 @@ class SelectivePartTimmSEDGPU(LightningModule):
                 x = self.spec_augmenter(x)
             
             
-        #x = x.transpose(2, 3)
-        print(x.shape)
+        x = x.transpose(2, 3)
+        #print(x.shape)
         # (batch_size, channels, frames, freq)
-        x = self.encoder(x)
+        x = self.backbone(x)
         # (batch_size, channels, frames)
         b, c, t, f = x.shape
         x = x.permute(0, 2, 1, 3)

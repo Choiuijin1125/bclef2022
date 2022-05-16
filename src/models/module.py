@@ -211,7 +211,13 @@ class SelectiveTrainModule(LightningModule):
             selective_x = batch["mixup"]["image"]
             selective_y = batch["mixup"]["targets"]
             selective_weight = batch["mixup"]["weight"]
-            outputs = self.model(x,y, weight, selective_x, selective_y, selective_weight)
+            
+            x = torch.concat([x, selective_x])
+            y = torch.concat([y, selective_y])
+            weight = torch.concat([weight, selective_weight])
+            
+            outputs = self.model(x,y, weight)
+            
             loss = train_utils.loss_fn(outputs, self.cfg)            
         
         else:
