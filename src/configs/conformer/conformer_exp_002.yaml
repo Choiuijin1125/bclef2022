@@ -4,7 +4,7 @@ trainer:
     ######################
   accelerator: 'gpu'
   devices: -1
-  max_epochs: 25
+  max_epochs: 30
   strategy: "ddp_find_unused_parameters_false"
 #   amp_backend: 'apex'
 #   amp_level: O1 # O1/O2 for mixed precision
@@ -12,14 +12,16 @@ trainer:
     
   
 model:
-  base_model: 
-    name: "tf_efficientnet_b0_ns"
-    pretrained: True
-    in_channels: 1
+  encoder:
+    encoder_dim: 176
+    num_encoder_layers: 16
+    input_dim : ${model.n_mels}
+    num_classes: ${model.num_classes}
+    num_attention_heads: 4
   #split_duration: 5
   label_smoothing: 0.1
   min_rating: 0.0
-  train_mode: "base"
+  train_mode: "base_conformer"
   sr: 32000
   n_mels: 128
   fmin: 50
@@ -31,15 +33,16 @@ model:
   num_classes: 152
   duration: 15
   target_columns: ???
-  mixup: 1
+  mixup: 0.5
   mixup2: 0
-  mix_beta: 1
+  mix_beta: 0.4
+  spec_aug: 0.25
   train_ds:
-    batch_size: 96
+    batch_size: 64
     num_workers: 64
     
   valid_ds: 
-    batch_size: 48
+    batch_size: 64
     num_workers: 64
     
   optim:
@@ -58,10 +61,29 @@ model:
   augment:
     backgroundnoise:
       _target_: audiomentations.AddBackgroundNoise
-      sounds_path: "/home/mega/mais/datasets/SSD2/arxiv/kaggle-birdclef2021-2nd-place-main/input/2021/ff1010bird_nocall/nocall"
+      sounds_path: "/home/mega/jin/bclef_v2/datasets/binary/ff1010bird_nocall/nocall_resample/"
       min_snr_in_db: 0
       max_snr_in_db: 3
       p: 0.5
+#     backgroundnoise:
+#       _target_: audiomentations.AddBackgroundNoise
+#       sounds_path: "/home/mega/jin/bclef_v2/datasets/binary_2021/ff1010bird_nocall/nocall/"
+#       min_snr_in_db: 0
+#       max_snr_in_db: 3
+#       p: 0.5
+#     backgroundnoise2:
+#       _target_: audiomentations.AddBackgroundNoise
+#       sounds_path: "/home/mega/jin/bclef_v2/datasets/binary_2021/train_soundscapes/nocall/"
+#       min_snr_in_db: 0
+#       max_snr_in_db: 3
+#       p: 0.25
+#     backgroundnoise3:      
+#       _target_: audiomentations.AddBackgroundNoise
+#       sounds_path: "/home/mega/jin/bclef_v2/datasets/binary_2021/aicrowd2020_noise_30sec/noise_30sec/"
+#       min_snr_in_db: 0
+#       max_snr_in_db: 3
+#       p: 0.25
+      
         
         
 
@@ -72,7 +94,7 @@ exp_manager:
   logger: 
     _target_: pytorch_lightning.loggers.WandbLogger
     project: "BCLEF2022"
-    name: "timmSED_exp_002"
+    name: "conformer_exp002"
   callbacks:
     lr_callback: 
       _target_: pytorch_lightning.callbacks.LearningRateMonitor
@@ -80,7 +102,7 @@ exp_manager:
     checkpoint_callback:
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       save_top_k: 3
-      dirpath: "../outputs/timm/exp_002"
+      dirpath: "../outputs/conformer/exp_002"
       monitor: "valid_loss"
   
 #   EVALUATION = 'AUC'

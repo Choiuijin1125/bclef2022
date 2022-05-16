@@ -10,7 +10,7 @@ import torchaudio.transforms as T
 from torchlibrosa.augmentation import SpecAugmentation
 from pytorch_lightning.core.lightning import LightningModule
 
-from .model_utils import GeM, Mixup
+from .model_utils import GeM, Mixup, Selective_Mixup
 
 def init_layer(layer):
     nn.init.xavier_uniform_(layer.weight)
@@ -239,3 +239,297 @@ class TimmSEDGPU(LightningModule):
         }
 
         return output_dict
+    
+    
+class SelectiveTimmSEDGPU(LightningModule):
+    def __init__(self, cfg
+                 ):
+        super().__init__()
+        # melextractor
+        self.cfg = cfg
+        self.logmel_extractor = nn.Sequential(
+            T.MelSpectrogram(sample_rate=cfg.sr,                 
+                             n_fft=cfg.window_size,
+                             hop_length=cfg.hop_size,
+                             power=2.0, 
+                             n_mels=cfg.n_mels,
+                             f_min=cfg.fmin,
+                             f_max=cfg.fmax,
+                             normalized=False),
+            T.AmplitudeToDB(top_db=cfg.top_db)
+        )
+
+        # Spec augmenter
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
+                                               freq_drop_width=8, freq_stripes_num=2)
+
+        self.bn0 = nn.BatchNorm2d(cfg.n_mels)
+        #self.global_pooling = GeM()
+        base_model = timm.create_model(
+            cfg.base_model.name,
+            pretrained=cfg.base_model.pretrained,
+            in_chans=cfg.base_model.in_channels,
+        )
+        layers = list(base_model.children())[:-2]
+        self.encoder = nn.Sequential(*layers)
+
+        if hasattr(base_model, "fc"):
+            in_features = base_model.fc.in_features
+        else:
+            in_features = base_model.classifier.in_features
+
+        self.fc1 = nn.Linear(in_features, in_features, bias=True)
+        self.att_block = AttBlockV2(
+            in_features, cfg.num_classes, activation="sigmoid"
+        )
+
+        self.mixup = Mixup(mix_beta=cfg.mix_beta)
+        self.selective_mixup = Selective_Mixup(mix_beta=cfg.mix_beta)
+        
+        self.init_weight()
+
+    def init_weight(self):
+        init_layer(self.fc1)
+        init_bn(self.bn0)
+
+    def forward(self, x, y, weight, selective_x=None, selective_y=None, selective_weight=None):
+        
+        
+        with torch.cuda.amp.autocast(False):
+            
+            x = self.logmel_extractor(x).unsqueeze(1).transpose(2, 3)
+            if self.training:
+                selective_x = self.logmel_extractor(selective_x).unsqueeze(1).transpose(2, 3)
+            
+        frames_num = x.size(2)
+
+        x = x.transpose(1, 3)
+        x = self.bn0(x)
+        x = x.transpose(1, 3)
+        
+        if self.training:
+            selective_x = selective_x.transpose(1, 3)
+            selective_x = self.bn0(selective_x)
+            selective_x = selective_x.transpose(1, 3)
+            
+        if self.training:
+            x = x.permute(0, 2, 1, 3)
+            selective_x = selective_x.permute(0, 2, 1, 3)
+            
+            if np.random.random() <= self.cfg.selective_mixup:
+                
+                x, y, weight = self.selective_mixup(x, y, weight, selective_x, selective_y, selective_weight)
+                
+            if np.random.random() <= self.cfg.mixup:
+                
+                x, y, weight = self.mixup(x, y, weight)
+                
+            if np.random.random() <= self.cfg.mixup2:
+                
+                x, y, weight = self.mixup(x, y, weight)
+            
+            x = x.permute(0, 2, 1, 3)
+            
+            if np.random.random() < self.cfg.spec_aug:
+                
+                x = self.spec_augmenter(x)
+            
+            
+            
+        x = x.transpose(2, 3)
+        # (batch_size, channels, frames, freq)
+        x = self.encoder(x)
+        # (batch_size, channels, frames)
+        x = torch.mean(x, dim=3)
+
+        # channel smoothing
+        x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)
+        x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
+        
+        x = x1 + x2
+        
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = x.transpose(1, 2)
+        x = F.relu_(self.fc1(x))
+        x = x.transpose(1, 2)
+        x = F.dropout(x, p=0.5, training=self.training)
+        (clipwise_output, logit, segmentwise_logit) = self.att_block(x)
+        # logit = torch.sum(norm_att * self.att_block.cla(x), dim=2)
+        segmentwise_logit = segmentwise_logit.transpose(1, 2)
+        
+        segmentwise_output = torch.sigmoid(segmentwise_logit)
+
+        interpolate_ratio = frames_num // segmentwise_output.size(1)
+
+        # Get framewise output
+        framewise_output = interpolate(segmentwise_output, interpolate_ratio)
+        framewise_output = pad_framewise_output(framewise_output, frames_num)
+
+        framewise_logit = interpolate(segmentwise_logit, interpolate_ratio)
+        framewise_logit = pad_framewise_output(framewise_logit, frames_num)
+
+        output_dict = {
+            "logit": logit,
+            "framewise_logit": framewise_logit,
+            "clipwise_output": clipwise_output,
+            "targets": y,
+            "weight": weight
+        }
+
+        return output_dict
+    
+    
+class SelectivePartTimmSEDGPU(LightningModule):
+    def __init__(self, cfg
+                 ):
+        super().__init__()
+        # melextractor
+        self.cfg = cfg
+        self.logmel_extractor = nn.Sequential(
+            T.MelSpectrogram(sample_rate=cfg.sr,                 
+                             n_fft=cfg.window_size,
+                             hop_length=cfg.hop_size,
+                             power=2.0, 
+                             n_mels=cfg.n_mels,
+                             f_min=cfg.fmin,
+                             f_max=cfg.fmax,
+                             normalized=False),
+            T.AmplitudeToDB(top_db=cfg.top_db)
+        )
+
+        # Spec augmenter
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
+                                               freq_drop_width=8, freq_stripes_num=2)
+
+        self.bn0 = nn.BatchNorm2d(cfg.n_mels)
+        #self.global_pooling = GeM()
+        base_model = timm.create_model(
+            cfg.base_model.name,
+            pretrained=cfg.base_model.pretrained,
+            in_chans=cfg.base_model.in_channels,
+        )
+        layers = list(base_model.children())[:-2]
+        self.encoder = nn.Sequential(*layers)
+
+        if hasattr(base_model, "fc"):
+            in_features = base_model.fc.in_features
+        else:
+            in_features = base_model.classifier.in_features
+
+        self.fc1 = nn.Linear(in_features, in_features, bias=True)
+        self.att_block = AttBlockV2(
+            in_features, cfg.num_classes, activation="sigmoid"
+        )
+
+        self.mixup = Mixup(mix_beta=cfg.mix_beta)
+        self.selective_mixup = Selective_Mixup(mix_beta=cfg.mix_beta)
+        self.factor = int(cfg.duration / 5.0)
+        
+        self.init_weight()
+
+    def init_weight(self):
+        init_layer(self.fc1)
+        init_bn(self.bn0)
+        
+        
+
+    def forward(self, x, y, weight, selective_x=None, selective_y=None, selective_weight=None):
+        
+        bs, time = x.shape
+        x = x.reshape(bs * self.factor, time // self.factor)
+        
+        if self.training:
+            selective_x = selective_x.reshape(bs * self.factor, time // self.factor)
+       
+        with torch.cuda.amp.autocast(False):
+            
+            x = self.logmel_extractor(x).unsqueeze(1).transpose(2, 3)
+            
+            if self.training:
+                selective_x = self.logmel_extractor(selective_x).unsqueeze(1).transpose(2, 3)
+            
+        frames_num = x.size(2)
+
+        x = x.transpose(1, 3)
+        x = self.bn0(x)
+        x = x.transpose(1, 3)
+        
+        if self.training:
+            selective_x = selective_x.transpose(1, 3)
+            selective_x = self.bn0(selective_x)
+            selective_x = selective_x.transpose(1, 3)
+            
+        if self.training:
+            b, c, t, f = x.shape
+            
+            x = x.permute(0, 2, 1, 3)           
+            selective_x = selective_x.permute(0, 2, 1, 3)
+            
+            x = x.reshape(b // self.factor, self.factor * t, c, f)
+            selective_x = selective_x.reshape(b // self.factor, self.factor * t, c, f)
+            
+            if np.random.random() <= self.cfg.selective_mixup:
+                
+                x, y, weight = self.selective_mixup(x, y, weight, selective_x, selective_y, selective_weight)
+                
+            if np.random.random() <= self.cfg.mixup:
+                
+                x, y, weight = self.mixup(x, y, weight)
+                
+            if np.random.random() <= self.cfg.mixup2:
+                
+                x, y, weight = self.mixup(x, y, weight)
+                            
+            x = x.reshape(b, t, c, f)
+            x = x.permute(0, 2, 1, 3)
+            
+            if np.random.random() < self.cfg.spec_aug:
+                
+                x = self.spec_augmenter(x)
+            
+            
+        x = x.transpose(2, 3)
+        # (batch_size, channels, frames, freq)
+        x = self.encoder(x)
+        # (batch_size, channels, frames)
+        b, c, t, f = x.shape
+        x = x.permute(0, 2, 1, 3)
+        x = x.reshape(b // self.factor, self.factor * t, c, f)
+        x = x.permute(0, 2, 1, 3)   
+        x = torch.mean(x, dim=3)
+
+        # channel smoothing
+        x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)
+        x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
+        
+        x = x1 + x2
+        
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = x.transpose(1, 2)
+        x = F.relu_(self.fc1(x))
+        x = x.transpose(1, 2)
+        x = F.dropout(x, p=0.5, training=self.training)
+        (clipwise_output, logit, segmentwise_logit) = self.att_block(x)
+        # logit = torch.sum(norm_att * self.att_block.cla(x), dim=2)
+        segmentwise_logit = segmentwise_logit.transpose(1, 2)
+        
+        segmentwise_output = torch.sigmoid(segmentwise_logit)
+
+        interpolate_ratio = frames_num // segmentwise_output.size(1)
+
+        # Get framewise output
+        framewise_output = interpolate(segmentwise_output, interpolate_ratio)
+        framewise_output = pad_framewise_output(framewise_output, frames_num)
+
+        framewise_logit = interpolate(segmentwise_logit, interpolate_ratio)
+        framewise_logit = pad_framewise_output(framewise_logit, frames_num)
+
+        output_dict = {
+            "logit": logit,
+            "framewise_logit": framewise_logit,
+            "clipwise_output": clipwise_output,
+            "targets": y,
+            "weight": weight
+        }
+
+        return output_dict        

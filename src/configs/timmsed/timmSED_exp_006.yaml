@@ -3,9 +3,9 @@ trainer:
     # Globals #
     ######################
   accelerator: 'gpu'
-  devices: -1
-  max_epochs: 25
-  strategy: "ddp_find_unused_parameters_false"
+  devices: 1
+  max_epochs: 30
+#   strategy: "ddp_find_unused_parameters_false"
 #   amp_backend: 'apex'
 #   amp_level: O1 # O1/O2 for mixed precision
 #   precision: 16 # Should be set to 16 for O1 and O2 to enable the AMP.  
@@ -19,7 +19,7 @@ model:
   #split_duration: 5
   label_smoothing: 0.1
   min_rating: 0.0
-  train_mode: "base"
+  train_mode: "selective_mixup"
   sr: 32000
   n_mels: 128
   fmin: 50
@@ -31,11 +31,13 @@ model:
   num_classes: 152
   duration: 15
   target_columns: ???
-  mixup: 1
+  mixup: 0.5
   mixup2: 0
+  selective_mixup: 0.8
+  spec_aug: 0.25
   mix_beta: 1
   train_ds:
-    batch_size: 96
+    batch_size: 48
     num_workers: 64
     
   valid_ds: 
@@ -72,7 +74,7 @@ exp_manager:
   logger: 
     _target_: pytorch_lightning.loggers.WandbLogger
     project: "BCLEF2022"
-    name: "timmSED_exp_002"
+    name: "timmSED_exp_005"
   callbacks:
     lr_callback: 
       _target_: pytorch_lightning.callbacks.LearningRateMonitor
@@ -80,7 +82,7 @@ exp_manager:
     checkpoint_callback:
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       save_top_k: 3
-      dirpath: "../outputs/timm/exp_002"
+      dirpath: "../outputs/timm/exp_006/exp_006_fold_3"
       monitor: "valid_loss"
   
 #   EVALUATION = 'AUC'

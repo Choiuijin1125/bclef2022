@@ -32,10 +32,8 @@ class ConformerGPU(nn.Module):
         self.spec_augmenter = SpecAugmentation(time_drop_width=64//2, time_stripes_num=2,
                                                freq_drop_width=8//2, freq_stripes_num=2)
 
-        self.bn0 = nn.BatchNorm2d(cfg.n_mels)
 
         self.model = Conformer(**cfg.encoder)
-        
         self.mixup = Mixup(mix_beta=cfg.mix_beta)
         
 
@@ -44,10 +42,6 @@ class ConformerGPU(nn.Module):
         with torch.cuda.amp.autocast(False):
             
             x = self.logmel_extractor(x).unsqueeze(1).transpose(2, 3)
-
-        x = x.transpose(1, 3)
-        x = self.bn0(x)
-        x = x.transpose(1, 3)            
             
         if self.training:
             if np.random.random() <= self.cfg.mixup:
@@ -63,7 +57,6 @@ class ConformerGPU(nn.Module):
         
         x = torch.mean(x, dim=1)
         encoder_outputs, encoder_output_lengths = self.model.encoder(x, x_len)
-
         outputs = self.model.fc(encoder_outputs)
         #outputs, _ = torch.max(outputs, dim=1)
         outputs = torch.mean(outputs, dim=1)

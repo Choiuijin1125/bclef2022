@@ -60,3 +60,32 @@ class Mixup(LightningModule):
         else:
             weight = coeffs.view(-1) * weight + (1 - coeffs.view(-1)) * weight[perm]
             return X, Y, weight
+        
+class Selective_Mixup(nn.Module):
+    def __init__(self, mix_beta):
+
+        super(Selective_Mixup, self).__init__()
+        self.beta_distribution = Beta(mix_beta, mix_beta)
+
+    def forward(self, X, Y, weight, selective_X, selective_Y, selective_weight):
+
+        bs = X.shape[0]
+        selective_bs = selective_X.shape[0]
+        n_dims = len(X.shape)
+        perm = torch.randperm(selective_bs)
+        coeffs = self.beta_distribution.rsample(torch.Size((bs,))).to(X.device)
+
+        if n_dims == 2:
+            X = coeffs.view(-1, 1) * X + (1 - coeffs.view(-1, 1)) * selective_X[perm]
+        elif n_dims == 3:
+            X = coeffs.view(-1, 1, 1) * X + (1 - coeffs.view(-1, 1, 1)) * selective_X[perm]
+        else:
+            X = coeffs.view(-1, 1, 1, 1) * X + (1 - coeffs.view(-1, 1, 1, 1)) * selective_X[perm]
+
+        Y = coeffs.view(-1, 1) * Y + (1 - coeffs.view(-1, 1)) * selective_Y[perm]
+
+        if weight is None:
+            return X, Y
+        else:
+            weight = coeffs.view(-1) * weight + (1 - coeffs.view(-1)) * selective_weight[perm]
+            return X, Y, weight                
