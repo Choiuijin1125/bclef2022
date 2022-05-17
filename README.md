@@ -9,6 +9,7 @@ There are two track I've been trying
 - While training I made two dataloader with same batch `train_dataloader`, `scored_brids_mixup_dataloader`.
 - `scored_brids_mixup_dataloader` is the dataloader which only has scored_birds audio from train set
 - In every batch do mixup with train_set + scored_birds_set(kind of overfitting)
+- model will see scored birds around 10 times than other class audio
 3. give penalty 
 - with selective mixup, model can be overfitted with scored birds, and especially high frequency scored birds(`skyalr`, `houfin`, etc..), so trained model show very high confidence score in high frequency scored birds
 - so I have a penalty to that class depending on distribution of class `train.primary_label.value_counts()[scored_birds_list]` It seems like 
