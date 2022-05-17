@@ -31,7 +31,7 @@ for i, scored_column in enumerate(conf.model.scored_columns):
 - Label smoothing +0.01 to everything (birdclef2021-2nd-place)
 
   ex [0.1, 1, 0.1, 0,1,...]
-
+  
 ### Augmentation
 - only use backgroundnoise(ff1010bird_nocall, train_soundscapes_2021, aicrowd2020_noise_30sec)
 
@@ -44,6 +44,10 @@ for i, scored_column in enumerate(conf.model.scored_columns):
 
 ### Training
 - F32 training(I don't know why, if I use mixed precision training with pytorch ligthing loss will be explored)
+
+### Validation
+- Stratifiedkfold on primary_label, only validate scored birds(some fold dosen't have all of scored birds)
+- I think it's better to use bootstrap based validation(n sampling)
 
 ### Model
 1. TimmSED
