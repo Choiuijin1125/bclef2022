@@ -166,7 +166,7 @@ class SelectivePartConformerGPU(LightningModule):
         
         outputs = self.model.fc(x)
         #outputs, _ = torch.max(outputs, dim=1)
-        outputs = torch.mean(outputs, dim=1)
+        outputs = torch.mean(outputs, dim=2)
         
         output_dict = {
             "framewise_output": outputs,

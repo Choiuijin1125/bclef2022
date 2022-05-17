@@ -504,7 +504,7 @@ class SelectivePartTimmSEDGPU(LightningModule):
         b, c, t, f = x.shape
         x = x.permute(0, 2, 1, 3)
         x = x.reshape(b // self.factor, self.factor * t, c, f)
-        x = x.permute(0, 2, 1, 3)   
+        x = x.permute(0, 2, 1, 3)
         x = torch.mean(x, dim=3)
 
         # channel smoothing

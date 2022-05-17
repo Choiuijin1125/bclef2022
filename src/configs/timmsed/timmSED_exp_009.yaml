@@ -4,7 +4,7 @@ trainer:
     ######################
   accelerator: 'gpu'
   devices: 1
-  max_epochs: 40
+  max_epochs: 20
   strategy: "ddp_find_unused_parameters_false"
 #   amp_backend: 'apex'
 #   amp_level: O1 # O1/O2 for mixed precision
@@ -13,7 +13,7 @@ trainer:
   
 model:
   base_model: 
-    name: "eca_nfnet_l0"
+    name: "tf_efficientnet_b0_ns"
     pretrained: True
     in_channels: 1
   #split_duration: 5
@@ -37,7 +37,7 @@ model:
   spec_aug: 0.25
   mix_beta: 1
   train_ds:
-    batch_size: 24
+    batch_size: 36
     num_workers: 32
     
   valid_ds: 
@@ -100,7 +100,7 @@ exp_manager:
     checkpoint_callback:
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       save_top_k: 1
-      dirpath: "../outputs/timm/exp_008/exp_008_fold_0_long_epoch"
+      dirpath: "../outputs/timm/exp_009/exp_009_fold_0"
       monitor: "valid_loss"
   
 #   EVALUATION = 'AUC'

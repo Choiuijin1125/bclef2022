@@ -1,0 +1,30 @@
+name: dcase20t4
+channels:
+  - anaconda
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.8
+  - matplotlib
+  - numpy
+  - pytorch=1.7.0
+  - scipy
+  - tqdm
+  - yaml
+  - youtube-dl
+  - pip 
+  - pip:
+    - dcase-util
+    - desed@git+https://github.com/turpaultn/DESED
+    - h5py
+    - librosa
+    - pandas
+    - psds-eval
+    - scaper
+    - scikit-learn
+    - sed-eval
+    - tensorboard
+    - torch_optimizer
+    - torchsummary
+    - wandb
+
