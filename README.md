@@ -1,5 +1,9 @@
 # bclef2022
 
+## How to train
+
+check notebooks/scripts
+
 ## Main Idea
 
 There are two track I've been trying
