@@ -73,3 +73,4 @@ for i, scored_column in enumerate(conf.model.scored_columns):
 - other backbone with best score model
 - train with 2021 datasets + selective mixup
 - selective mixup with birdclef2021-2nd-place mode(public 0.75)
+- undersample selective mixup(because of large distribution class)
