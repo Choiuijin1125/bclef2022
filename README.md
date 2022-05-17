@@ -71,6 +71,7 @@ for i, scored_column in enumerate(conf.model.scored_columns):
 3. Public : 0.75
 - Reproduction of birdclef2021-2nd-place(binary classification + cfg_ps_12_v21.py 4folds)
 - I train this model without validation(4fold ensemble)
+- threshold : 0.02
 - Inference Time : 3hours
 
 ## Next try
